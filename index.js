@@ -1,0 +1,332 @@
+const {
+    Client,
+    GatewayIntentBits,
+    PermissionsBitField,
+    AttachmentBuilder
+} = require("discord.js");
+
+const { OpenAI } = require("openai");
+const fs = require("fs");
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+// =========================
+// CHATBOT CHANNELS
+// =========================
+
+let chatbotChannels = new Map();
+
+if (fs.existsSync("./chatbot.json")) {
+    chatbotChannels = new Map(
+        Object.entries(
+            JSON.parse(
+                fs.readFileSync(
+                    "./chatbot.json",
+                    "utf8"
+                )
+            )
+        )
+    );
+}
+
+function saveChannels() {
+    fs.writeFileSync(
+        "./chatbot.json",
+        JSON.stringify(
+            Object.fromEntries(chatbotChannels),
+            null,
+            2
+        )
+    );
+}
+
+// =========================
+// RATE LIMIT
+// =========================
+
+const channelRequests = new Map();
+const lockedChannels = new Map();
+
+const MAX_REQUESTS = 15;
+const WINDOW_TIME = 60000;
+const LOCK_TIME = 60000;
+
+// =========================
+// READY
+// =========================
+
+client.once("ready", () => {
+
+    console.log(
+        `${client.user.tag} Online`
+    );
+
+    client.user.setActivity(
+        "🤖 ChatGPT AI"
+    );
+
+});
+
+// =========================
+// MESSAGE
+// =========================
+
+client.on(
+    "messageCreate",
+    async (message) => {
+
+        if (message.author.bot) return;
+        if (!message.guild) return;
+
+        // =====================
+        // ADMIN COMMANDS
+        // =====================
+
+        if (
+            message.content === "!chatbot on"
+        ) {
+
+            if (
+                !message.member.permissions.has(
+                    PermissionsBitField.Flags.Administrator
+                )
+            ) {
+                return message.reply(
+                    "❌ Chỉ Admin mới dùng được lệnh này."
+                );
+            }
+
+            chatbotChannels.set(
+                message.guild.id,
+                message.channel.id
+            );
+
+            saveChannels();
+
+            return message.reply(
+                "✅ Đã bật ChatGPT tại kênh này."
+            );
+        }
+
+        if (
+            message.content === "!chatbot off"
+        ) {
+
+            if (
+                !message.member.permissions.has(
+                    PermissionsBitField.Flags.Administrator
+                )
+            ) {
+                return message.reply(
+                    "❌ Chỉ Admin mới dùng được lệnh này."
+                );
+            }
+
+            chatbotChannels.delete(
+                message.guild.id
+            );
+
+            saveChannels();
+
+            return message.reply(
+                "❌ Đã tắt ChatGPT."
+            );
+        }
+
+        // =====================
+        // CHECK CHANNEL
+        // =====================
+
+        if (
+            chatbotChannels.get(
+                message.guild.id
+            ) !== message.channel.id
+        ) {
+            return;
+        }
+
+        // =====================
+        // CHANNEL LOCK
+        // =====================
+
+        if (
+            lockedChannels.has(
+                message.channel.id
+            )
+        ) {
+            return;
+        }
+
+        // =====================
+        // RATE LIMIT
+        // =====================
+
+        if (
+            !channelRequests.has(
+                message.channel.id
+            )
+        ) {
+
+            channelRequests.set(
+                message.channel.id,
+                {
+                    count: 0,
+                    startTime: Date.now()
+                }
+            );
+
+        }
+
+        const data =
+            channelRequests.get(
+                message.channel.id
+            );
+
+        if (
+            Date.now() -
+            data.startTime >
+            WINDOW_TIME
+        ) {
+
+            data.count = 0;
+            data.startTime =
+                Date.now();
+
+        }
+
+        data.count++;
+
+        if (
+            data.count >
+            MAX_REQUESTS
+        ) {
+
+            lockedChannels.set(
+                message.channel.id,
+                true
+            );
+
+            await message.channel.send(
+                "🔒 Tạm Thời Khóa Kênh Để Tránh Quá Tải. Sẽ Mở Lại Sau 1 Phút Nữa."
+            );
+
+            setTimeout(
+                async () => {
+
+                    lockedChannels.delete(
+                        message.channel.id
+                    );
+
+                    try {
+
+                        await message.channel.send(
+                            "🔓 Kênh đã được mở lại."
+                        );
+
+                    } catch {}
+
+                },
+                LOCK_TIME
+            );
+
+            return;
+        }
+
+        // =====================
+        // AI CHAT
+        // =====================
+
+        try {
+
+            await message.channel.sendTyping();
+
+            const response =
+                await openai.chat.completions.create({
+                    model: "gpt-4o-mini",
+                    messages: [
+                        {
+                            role: "system",
+                            content:
+                                "Bạn là trợ lý AI thân thiện."
+                        },
+                        {
+                            role: "user",
+                            content:
+                                message.content
+                        }
+                    ]
+                });
+
+            const reply =
+                response.choices[0]
+                ?.message?.content ||
+                "Không có phản hồi.";
+
+            if (
+                reply.length <= 2000
+            ) {
+
+                return message.reply(
+                    reply
+                );
+
+            }
+
+            // =====================
+            // TXT FILE
+            // =====================
+
+            const fileName =
+                `response-${Date.now()}.txt`;
+
+            fs.writeFileSync(
+                fileName,
+                reply,
+                "utf8"
+            );
+
+            const file =
+                new AttachmentBuilder(
+                    fileName
+                );
+
+            await message.reply({
+                content:
+                    "📄 Nội dung quá dài, đã xuất thành file.",
+                files: [file]
+            });
+
+            fs.unlinkSync(
+                fileName
+            );
+
+        } catch (err) {
+
+            console.error(err);
+
+            message.reply(
+                "❌ Lỗi khi xử lý AI."
+            );
+
+        }
+
+    }
+);
+
+// =========================
+// LOGIN
+// =========================
+
+client.login(
+    process.env.DISCORD_TOKEN
+); 
