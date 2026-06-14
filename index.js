@@ -38,7 +38,12 @@ const client = new Client({
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
-
+console.log(
+    "OPENAI_API_KEY:",
+    process.env.OPENAI_API_KEY
+        ? "FOUND"
+        : "MISSING"
+);
 // =========================
 // CHATBOT CHANNELS
 // =========================
@@ -262,6 +267,10 @@ client.on(
 
         try {
 
+            console.log(
+                `[GPT] ${message.author.tag}: ${message.content}`
+            );
+
             await message.channel.sendTyping();
 
             const response =
@@ -282,20 +291,28 @@ client.on(
                 });
 
             const reply =
-                response.choices[0]
-                ?.message?.content ||
-                "Không có phản hồi.";
+                response?.choices?.[0]?.message?.content;
 
-            if (
-                reply.length <= 2000
-            ) {
+            if (!reply) {
+
+                console.log(
+                    "[GPT] Không nhận được phản hồi."
+                );
 
                 return message.reply(
-                    reply
+                    "❌ AI không trả về nội dung."
                 );
 
             }
 
+            // Trả lời ngắn
+            if (reply.length <= 2000) {
+
+                return message.reply(reply);
+
+            }
+
+            // Trả lời dài -> xuất file txt
             const fileName =
                 `response-${Date.now()}.txt`;
 
@@ -309,32 +326,33 @@ client.on(
                 content:
                     "📄 Nội dung quá dài, đã xuất thành file.",
                 files: [
-                    new AttachmentBuilder(
-                        fileName
-                    )
+                    new AttachmentBuilder(fileName)
                 ]
             });
 
-            fs.unlinkSync(
-                fileName
-            );
+            fs.unlinkSync(fileName);
 
-        } catch (err) {
+       } catch (err) {
+
+            console.error(
+                "========== GPT ERROR =========="
+            );
 
             console.error(err);
 
-            message.reply(
-                "❌ Lỗi khi xử lý AI."
+            console.error(
+                "================================"
+            );
+
+            return message.reply(
+                `❌ Lỗi GPT: ${err.message}`
             );
 
         }
 
     }
-);
 
-// =========================
-// LOGIN
-// =========================
+});
 
 client.login(
     process.env.DISCORD_TOKEN
