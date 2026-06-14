@@ -5,7 +5,7 @@ const {
     AttachmentBuilder
 } = require("discord.js");
 
-const { OpenAI } = require("openai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const express = require("express");
 const fs = require("fs");
 
@@ -35,14 +35,15 @@ const client = new Client({
     ]
 });
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
+const genAI = new GoogleGenerativeAI(
+    process.env.GEMINI_API_KEY
+);
 console.log(
-    "OPENAI_API_KEY:",
-    process.env.OPENAI_API_KEY
+    "GEMINI_API_KEY:",
+    process.env.GEMINI_API_KEY
         ? "FOUND"
         : "MISSING"
+);
 );
 // =========================
 // CHATBOT CHANNELS
@@ -96,7 +97,7 @@ client.once("clientReady", () => {
     );
 
     client.user.setActivity(
-        "🤖 ChatGPT AI"
+        "GPT VN 🇻🇳"
     );
 
 });
