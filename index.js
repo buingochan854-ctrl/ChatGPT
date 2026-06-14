@@ -6,7 +6,26 @@ const {
 } = require("discord.js");
 
 const { OpenAI } = require("openai");
+const express = require("express");
 const fs = require("fs");
+
+// =========================
+// WEB SERVER (RENDER)
+// =========================
+
+const app = express();
+
+app.get("/", (req, res) => {
+    res.send("🤖 Discord AI Bot Online");
+});
+
+app.listen(process.env.PORT || 3000, () => {
+    console.log("Web Server Online");
+});
+
+// =========================
+// DISCORD CLIENT
+// =========================
 
 const client = new Client({
     intents: [
@@ -65,7 +84,7 @@ const LOCK_TIME = 60000;
 // READY
 // =========================
 
-client.once("ready", () => {
+client.once("clientReady", () => {
 
     console.log(
         `${client.user.tag} Online`
@@ -78,7 +97,7 @@ client.once("ready", () => {
 });
 
 // =========================
-// MESSAGE
+// MESSAGE CREATE
 // =========================
 
 client.on(
@@ -92,9 +111,7 @@ client.on(
         // ADMIN COMMANDS
         // =====================
 
-        if (
-            message.content === "!chatbot on"
-        ) {
+        if (message.content === "!chatbot on") {
 
             if (
                 !message.member.permissions.has(
@@ -118,9 +135,7 @@ client.on(
             );
         }
 
-        if (
-            message.content === "!chatbot off"
-        ) {
+        if (message.content === "!chatbot off") {
 
             if (
                 !message.member.permissions.has(
@@ -199,8 +214,7 @@ client.on(
         ) {
 
             data.count = 0;
-            data.startTime =
-                Date.now();
+            data.startTime = Date.now();
 
         }
 
@@ -282,10 +296,6 @@ client.on(
 
             }
 
-            // =====================
-            // TXT FILE
-            // =====================
-
             const fileName =
                 `response-${Date.now()}.txt`;
 
@@ -295,15 +305,14 @@ client.on(
                 "utf8"
             );
 
-            const file =
-                new AttachmentBuilder(
-                    fileName
-                );
-
             await message.reply({
                 content:
                     "📄 Nội dung quá dài, đã xuất thành file.",
-                files: [file]
+                files: [
+                    new AttachmentBuilder(
+                        fileName
+                    )
+                ]
             });
 
             fs.unlinkSync(
@@ -329,4 +338,4 @@ client.on(
 
 client.login(
     process.env.DISCORD_TOKEN
-); 
+);
