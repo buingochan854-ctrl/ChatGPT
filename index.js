@@ -44,7 +44,6 @@ console.log(
         ? "FOUND"
         : "MISSING"
 );
-);
 // =========================
 // CHATBOT CHANNELS
 // =========================
@@ -274,26 +273,20 @@ client.on(
 
             await message.channel.sendTyping();
 
-            const response =
-                await openai.chat.completions.create({
-                    model: "gpt-4o-mini",
-                    messages: [
-                        {
-                            role: "system",
-                            content:
-                                "Bạn là trợ lý AI thân thiện."
-                        },
-                        {
-                            role: "user",
-                            content:
-                                message.content
-                        }
-                    ]
-                });
+            const model =
+    genAI.getGenerativeModel({
+        model: "gemini-2.5-flash"
+    });
 
-            const reply =
-                response?.choices?.[0]?.message?.content;
+const result =
+    await model.generateContent(
+        `Bạn là trợ lý AI thân thiện.
 
+Người dùng: ${message.content}`
+    );
+
+const reply =
+    result.response.text();
             if (!reply) {
 
                 console.log(
