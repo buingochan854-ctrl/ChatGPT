@@ -5,12 +5,12 @@ const {
     AttachmentBuilder
 } = require("discord.js");
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { OpenAI } = require("openai");
 const express = require("express");
 const fs = require("fs");
 
 // =========================
-// WEB SERVER (RENDER)
+// WEB SERVER
 // =========================
 
 const app = express();
@@ -35,15 +35,22 @@ const client = new Client({
     ]
 });
 
-const genAI = new GoogleGenerativeAI(
-    process.env.GEMINI_API_KEY
-);
+// =========================
+// GROQ AI
+// =========================
+
+const openai = new OpenAI({
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1"
+});
+
 console.log(
-    "GEMINI_API_KEY:",
-    process.env.GEMINI_API_KEY
+    "GROQ_API_KEY:",
+    process.env.GROQ_API_KEY
         ? "FOUND"
         : "MISSING"
 );
+
 // =========================
 // CHATBOT CHANNELS
 // =========================
@@ -51,6 +58,7 @@ console.log(
 let chatbotChannels = new Map();
 
 if (fs.existsSync("./chatbot.json")) {
+
     chatbotChannels = new Map(
         Object.entries(
             JSON.parse(
@@ -61,17 +69,22 @@ if (fs.existsSync("./chatbot.json")) {
             )
         )
     );
+
 }
 
 function saveChannels() {
+
     fs.writeFileSync(
         "./chatbot.json",
         JSON.stringify(
-            Object.fromEntries(chatbotChannels),
+            Object.fromEntries(
+                chatbotChannels
+            ),
             null,
             2
         )
     );
+
 }
 
 // =========================
@@ -79,11 +92,13 @@ function saveChannels() {
 // =========================
 
 const channelRequests = new Map();
-const lockedChannels = new Map();
 
-const MAX_REQUESTS = 15;
+const MAX_REQUESTS = 10;
 const WINDOW_TIME = 60000;
 const LOCK_TIME = 60000;
+
+let aiLocked = false;
+let unlockTime = 0;
 
 // =========================
 // READY
@@ -96,7 +111,7 @@ client.once("clientReady", () => {
     );
 
     client.user.setActivity(
-        "GPT VN 🇻🇳"
+        "GPT VN 🇻🇳 | OpenAI API"
     );
 
 });
@@ -111,6 +126,23 @@ client.on(
 
         if (message.author.bot) return;
         if (!message.guild) return;
+
+        // =====================
+        // AI LOCK
+        // =====================
+
+        if (aiLocked) {
+
+            const timeLeft =
+                Math.ceil(
+                    (unlockTime - Date.now()) / 1000
+                );
+
+            return message.reply(
+                `⚠️ Hệ Thống AI đang tạm dừng để tránh lỗi hệ thống, bạn thử lại sau ${timeLeft} giây nhé!`
+            );
+
+        }
 
         // =====================
         // ADMIN COMMANDS
@@ -138,6 +170,7 @@ client.on(
             return message.reply(
                 "✅ Đã bật ChatGPT tại kênh này."
             );
+
         }
 
         if (message.content === "!chatbot off") {
@@ -161,6 +194,7 @@ client.on(
             return message.reply(
                 "❌ Đã tắt ChatGPT."
             );
+
         }
 
         // =====================
@@ -171,18 +205,6 @@ client.on(
             chatbotChannels.get(
                 message.guild.id
             ) !== message.channel.id
-        ) {
-            return;
-        }
-
-        // =====================
-        // CHANNEL LOCK
-        // =====================
-
-        if (
-            lockedChannels.has(
-                message.channel.id
-            )
         ) {
             return;
         }
@@ -230,35 +252,30 @@ client.on(
             MAX_REQUESTS
         ) {
 
-            lockedChannels.set(
-                message.channel.id,
-                true
+            aiLocked = true;
+            unlockTime =
+                Date.now() + LOCK_TIME;
+
+            console.log(
+                "AI LOCKED"
             );
 
             await message.channel.send(
-                "🔒 Tạm Thời Khóa Kênh Để Tránh Quá Tải. Sẽ Mở Lại Sau 1 Phút Nữa."
+                "🔒 Hệ Thống AI đang tạm dừng để tránh lỗi hệ thống."
             );
 
-            setTimeout(
-                async () => {
+            setTimeout(() => {
 
-                    lockedChannels.delete(
-                        message.channel.id
-                    );
+                aiLocked = false;
 
-                    try {
+                console.log(
+                    "AI UNLOCKED"
+                );
 
-                        await message.channel.send(
-                            "🔓 Kênh đã được mở lại."
-                        );
-
-                    } catch {}
-
-                },
-                LOCK_TIME
-            );
+            }, LOCK_TIME);
 
             return;
+
         }
 
         // =====================
@@ -268,30 +285,34 @@ client.on(
         try {
 
             console.log(
-                `[GPT] ${message.author.tag}: ${message.content}`
+                `[GROQ] ${message.author.tag}: ${message.content}`
             );
 
             await message.channel.sendTyping();
 
-            const model =
-    genAI.getGenerativeModel({
-        model: "gemini-2.5-flash"
-    });
+            const response =
+                await openai.chat.completions.create({
+                    model:
+                        "llama-3.1-8b-instant",
+                    messages: [
+                        {
+                            role: "system",
+                            content:
+                                "Bạn là trợ lý AI thân thiện."
+                        },
+                        {
+                            role: "user",
+                            content:
+                                message.content
+                        }
+                    ]
+                });
 
-const result =
-    await model.generateContent(
-        `Bạn là trợ lý AI thân thiện.
+            const reply =
+                response.choices?.[0]
+                ?.message?.content;
 
-Người dùng: ${message.content}`
-    );
-
-const reply =
-    result.response.text();
             if (!reply) {
-
-                console.log(
-                    "[GPT] Không nhận được phản hồi."
-                );
 
                 return message.reply(
                     "❌ AI không trả về nội dung."
@@ -299,14 +320,14 @@ const reply =
 
             }
 
-            // Trả lời ngắn
             if (reply.length <= 2000) {
 
-                return message.reply(reply);
+                return message.reply(
+                    reply
+                );
 
             }
 
-            // Trả lời dài -> xuất file txt
             const fileName =
                 `response-${Date.now()}.txt`;
 
@@ -320,16 +341,20 @@ const reply =
                 content:
                     "📄 Nội dung quá dài, đã xuất thành file.",
                 files: [
-                    new AttachmentBuilder(fileName)
+                    new AttachmentBuilder(
+                        fileName
+                    )
                 ]
             });
 
-            fs.unlinkSync(fileName);
+            fs.unlinkSync(
+                fileName
+            );
 
-       } catch (err) {
+        } catch (err) {
 
             console.error(
-                "========== GPT ERROR =========="
+                "========== AI ERROR =========="
             );
 
             console.error(err);
@@ -339,13 +364,18 @@ const reply =
             );
 
             return message.reply(
-                `❌ Lỗi GPT: ${err.message}`
+                `❌ Lỗi AI: ${err.message}`
             );
 
         }
 
-});
+    }
+);
 
-client.login(process.env.DISCORD_TOKEN)
-;
- 
+// =========================
+// LOGIN
+// =========================
+
+client.login(
+    process.env.DISCORD_TOKEN
+);
