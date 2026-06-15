@@ -295,7 +295,8 @@ await interaction.reply("🎨 Đang tạo ảnh...");
 
 try {  
     const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;  
-      
+     console.log(imageUrl);
+
     const response = await axios.get(imageUrl, {  
         responseType: "arraybuffer"  
     });  
@@ -311,9 +312,28 @@ try {
             }  
         ]  
     });  
-} catch (err) {  
-    console.error(err);  
-    await interaction.editReply("❌ Không thể tạo ảnh.");  
+} catch (err) {
+
+    console.error(
+        "========== IMAGE ERROR =========="
+    );
+
+    console.error(
+        err.response?.status
+    );
+
+    console.error(
+        err.message
+    );
+
+    console.error(
+        "================================="
+    );
+
+    await interaction.editReply(
+        `❌ Không thể tạo ảnh.\n${err.message}`
+    );
+
 }
 
 });
