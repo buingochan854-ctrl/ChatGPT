@@ -1,15 +1,23 @@
 {
-  "name": "discord-groq-bot",
-  "version": "1.0.0",
-  "description": "Discord AI Bot using Groq",
+  "name": "groq-discord-bot",
+  "version": "2.0.0",
+  "description": "Discord AI Bot using Groq API",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
+  "keywords": [
+    "discord",
+    "bot",
+    "groq",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
+    "axios": "^1.11.0",
     "discord.js": "^14.21.0",
     "express": "^5.1.0",
-    "fs": "^0.0.1-security",
     "openai": "^5.5.1"
   }
 }
